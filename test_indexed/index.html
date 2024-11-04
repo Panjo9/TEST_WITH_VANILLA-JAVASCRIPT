@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <script src="scripts/index.js" defer></script>
+   <title>Document</title>
+   <link rel="stylesheet" href="styles/index.css">
+</head>
+
+<body>
+   <main>
+      <h1>Lista de Tareas</h1>
+
+      <div class="lista">
+         <form id="formulario" action="index.html">
+            <div class="lista-entrada">
+               <label for="nombre">Nombre
+                  <input id="nombre" placeholder="Ingrese el nombre de la tarea">
+               </label>
+               <input type="submit" class="btn btn-agregar" value="Añadir">
+               <button type="button" class="btn btn-eliminar">Eliminar</button>
+               <button type="button" class="btn btn-notificacion" id="btn-notificacion">Notificaciones</button>
+            </div>
+            <ul class="lista-tareas" id="lista-tareas">
+            </ul>
+            <ul class="life-db" id="life-db">
+            </ul>
+         </form>
+      </div>
+   </main>
+</body>
+
+</html>
