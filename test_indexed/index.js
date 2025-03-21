@@ -24,10 +24,16 @@ let db;
 notas.appendChild(li('App iniciada'));
 
 const DB_NAME = 'Tareas';
-const DB_VERSION = 4;
+const DB_OLD_VERSION = 0;
+const DB_VERSION = 1;
 const TABLES = {
   tareas: {
-    v: { 3: 'tareas-V3', 4: 'tareas-V4' },
+    v: { [DB_VERSION]: 'tareas-V5' },
+    keyPath: 'tarea',
+  },
+  name: {
+    v: { [DB_VERSION]: 'name-V1' },
+    keyPath: 'id'
   },
 };
 
@@ -43,14 +49,10 @@ idb.onsuccess = (event) => {
 
   db = event.target.result;
 
-  console.log(db);
-
   displayData();
 };
 
 idb.onupgradeneeded = (event) => {
-  console.log('event', event);
-
   db = event.target.result;
 
   // console.log('Version actual:', event.oldVersion);
@@ -61,42 +63,43 @@ idb.onupgradeneeded = (event) => {
     notas.appendChild(li('Error al cargar la base de datos'));
   };
 
-  if (event.oldVersion < 4) {
-    db.deleteObjectStore(TABLES.tareas.v[3]);
-    const tareas = db.createObjectStore(TABLES.tareas.v[4], { keyPath: 'tarea' });
-    tareas.createIndex('name', 'name', { unique: false });
+  if (event.oldVersion < DB_VERSION) {
+    const tareas = db.createObjectStore(TABLES.tareas.v[DB_VERSION], { keyPath: TABLES.tareas.keyPath });
+    tareas.createIndex('nameId', 'nameId', { unique: false });
+
+    const name = db.createObjectStore(TABLES.name.v[1], { keyPath: TABLES.name.keyPath });
+    name.createIndex('name', 'name', { unique: true });
   }
 
   notas.appendChild(li('Objeto almacenado creado'));
 };
 
 function displayData() {
-  const transaction = db.transaction([TABLES.tareas.v[4]], 'readonly');
-  const objectStore = transaction.objectStore(TABLES.tareas.v[4]);
+  const NAME_TAREAS_TT = db.transaction([TABLES.name.v[DB_VERSION], TABLES.tareas.v[DB_VERSION]], 'readonly');
+  const NAME_OBS = NAME_TAREAS_TT.objectStore(TABLES.name.v[DB_VERSION]);
+  const TAREAS_OBS = NAME_TAREAS_TT.objectStore(TABLES.tareas.v[DB_VERSION]);
 
   // IDBCursor ---------------------------------
-  const request = objectStore.openCursor();
-
-  request.onsuccess = (event) => {
+  const NAME_OBS_REQUEST = NAME_OBS.openCursor();
+  NAME_OBS_REQUEST.onsuccess = (event) => {
     const cursor = event.target.result;
     if (cursor) {
       const { name } = cursor.value;
-      if (typeof name === 'object') lista.appendChild(p(name.value));
-      else lista.appendChild(p(name));
+      lista.appendChild(p(name));
       cursor.continue();
     }
   };
 
   // IDBIndex ---------------------------------
-  // const request = objectStore.getAll();
+  const TAREAS_OBS_REQUEST = TAREAS_OBS.get(TABLES.tareas.keyPath);
 
-  // request.onsuccess = (event) => {
-  //   const tareas = event.target.result;
-  //   if (tareas.length > 0)
-  //     tareas.forEach(({ tarea }) => {
-  //       lista.appendChild(p(tarea));
-  //     });
-  // };
+  TAREAS_OBS_REQUEST.onsuccess = (event) => {
+    const tareas = event.target.result;
+    console.log(event.target);
+    if (tareas) {
+      console.log(event.target);
+    } else console.log('No hay tareas');
+  };
 }
 
 function handleAddTask(e) {
@@ -107,27 +110,36 @@ function handleAddTask(e) {
     return;
   }
 
-  const transaction = db.transaction([TABLES.tareas.v[4]], 'readwrite');
+  const TAREAS_TT = db.transaction([TABLES.tareas.v[DB_VERSION]], 'readwrite');
+  const NAME_TT = db.transaction([TABLES.name.v[DB_VERSION]], 'readwrite');
 
-  const newTask = [{ tarea: 3, name: { id: 1, value: input.value } }];
+  const newName = [{ id: 1, name: input.value }];
+  const newTask = [{ tarea: 1, nameId: newName[0].id }];
+  // const newTask = [{ tarea: 2, name: input.value }];
 
-  transaction.onerror = (event) => {
-    console.log(event)
-    notas.appendChild(li(`Error al añadir la tarea: ${transaction.error}`));
+  TAREAS_TT.onerror = (event) => {
+    console.log(event);
+    notas.appendChild(li(`Error al añadir la tarea: ${TAREAS_TT.error}`));
   };
 
-  const objectStore = transaction.objectStore(TABLES.tareas.v[4]);
-  const objectStoreRequest = objectStore.add(newTask[0]);
+  const TAREA_OBS = TAREAS_TT.objectStore(TABLES.tareas.v[DB_VERSION]);
+  const NAME_OBS = NAME_TT.objectStore(TABLES.name.v[1]);
+  const TAREA_OBS_REQUEST = TAREA_OBS.add(newTask[0]);
+  const NAME_OBS_REQUEST = NAME_OBS.add(newName[0]);
 
-  objectStoreRequest.onsuccess = (event) => {
+  TAREA_OBS_REQUEST.onsuccess = (event) => {
     notas.appendChild(li('Consulta exitosa'));
     input.value = '';
   };
 
-  transaction.oncomplete = (event) => {
+  NAME_OBS_REQUEST.onsuccess = (event) => console.log('Consulta exitosa');
+
+  TAREAS_TT.oncomplete = (event) => {
     notas.appendChild(li('Todo hecho'));
     displayData();
   };
+
+  NAME_OBS_REQUEST.oncomplete = (event) => console.log('Todo hecho');
 }
 
 function li(note) {
