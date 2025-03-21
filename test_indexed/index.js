@@ -24,10 +24,10 @@ let db;
 notas.appendChild(li('App iniciada'));
 
 const DB_NAME = 'Tareas';
-const DB_VERSION = 1;
+const DB_VERSION = 4;
 const TABLES = {
   tareas: {
-    v: { 1: 'tareas', 2: 'tareas-V2', 3: 'tareas-V3', 4: 'tareas-V4' },
+    v: { 3: 'tareas-V3', 4: 'tareas-V4' },
   },
 };
 
@@ -60,26 +60,8 @@ idb.onupgradeneeded = (event) => {
   db.onerror = (event) => {
     notas.appendChild(li('Error al cargar la base de datos'));
   };
-  if (event.oldVersion < 1) {
-    const tareas = db.createObjectStore(TABLES.tareas.v[1], { keyPath: 'tarea' });
-    tareas.createIndex('name', 'name', { unique: false });
-  }
 
-  if (event.oldVersion < 2) {
-    db.deleteObjectStore(TABLES.tareas.v[1]);
-    const tareas = db.createObjectStore(TABLES.tareas.v[2], { keyPath: 'tarea' });
-    tareas.createIndex('name', 'name', { unique: false });
-  }
-
-  if (event.oldVersion < 3) {
-    db.deleteObjectStore(TABLES.tareas.v[1]);
-    db.deleteObjectStore(TABLES.tareas.v[2]);
-    const tareas = db.createObjectStore(TABLES.tareas.v[3], { keyPath: 'tarea' });
-    tareas.createIndex('name', 'name', { unique: false });
-  }
   if (event.oldVersion < 4) {
-    db.deleteObjectStore(TABLES.tareas.v[1]);
-    db.deleteObjectStore(TABLES.tareas.v[2]);
     db.deleteObjectStore(TABLES.tareas.v[3]);
     const tareas = db.createObjectStore(TABLES.tareas.v[4], { keyPath: 'tarea' });
     tareas.createIndex('name', 'name', { unique: false });
@@ -89,8 +71,8 @@ idb.onupgradeneeded = (event) => {
 };
 
 function displayData() {
-  const transaction = db.transaction([TABLES.tareas.v[1]], 'readonly');
-  const objectStore = transaction.objectStore(TABLES.tareas.v[1]);
+  const transaction = db.transaction([TABLES.tareas.v[4]], 'readonly');
+  const objectStore = transaction.objectStore(TABLES.tareas.v[4]);
 
   // IDBCursor ---------------------------------
   const request = objectStore.openCursor();
@@ -98,8 +80,9 @@ function displayData() {
   request.onsuccess = (event) => {
     const cursor = event.target.result;
     if (cursor) {
-      const { tarea, name } = cursor.value;
-      lista.appendChild(p(tarea));
+      const { name } = cursor.value;
+      if (typeof name === 'object') lista.appendChild(p(name.value));
+      else lista.appendChild(p(name));
       cursor.continue();
     }
   };
@@ -124,15 +107,16 @@ function handleAddTask(e) {
     return;
   }
 
-  const transaction = db.transaction([TABLES.tareas.v[1]], 'readwrite');
+  const transaction = db.transaction([TABLES.tareas.v[4]], 'readwrite');
 
-  const newTask = [{ tarea: input.value, name: input.value }];
+  const newTask = [{ tarea: 3, name: { id: 1, value: input.value } }];
 
   transaction.onerror = (event) => {
+    console.log(event)
     notas.appendChild(li(`Error al añadir la tarea: ${transaction.error}`));
   };
 
-  const objectStore = transaction.objectStore(TABLES.tareas.v[1]);
+  const objectStore = transaction.objectStore(TABLES.tareas.v[4]);
   const objectStoreRequest = objectStore.add(newTask[0]);
 
   objectStoreRequest.onsuccess = (event) => {
@@ -142,6 +126,7 @@ function handleAddTask(e) {
 
   transaction.oncomplete = (event) => {
     notas.appendChild(li('Todo hecho'));
+    displayData();
   };
 }
 
