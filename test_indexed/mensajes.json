@@ -1,0 +1,37 @@
+[
+  {
+    "id": 1,
+    "text": "Hola",
+    "createdAt": 1656083200000,
+    "userId": "123456789-1",
+    "fileId": null
+  },
+  {
+    "id": 2,
+    "text": "Dota",
+    "createdAt": 1656083200000,
+    "userId": "123456789-1",
+    "fileId": null
+  },
+  {
+    "id": 3,
+    "text": "Laravel",
+    "createdAt": 1656083200000,
+    "userId": "123456789-1",
+    "fileId": null
+  },
+  {
+    "id": 4,
+    "text": "React",
+    "createdAt": 1656083200000,
+    "userId": "123456789-2",
+    "fileId": null
+  },
+  {
+    "id": 5,
+    "text": "Nextjs",
+    "createdAt": 1656083200000,
+    "userId": "123456789-3",
+    "fileId": null
+  }
+]
