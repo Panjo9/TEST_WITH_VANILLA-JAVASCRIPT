@@ -1,37 +1,32 @@
 [
   {
-    "id": 1,
     "text": "Hola",
-    "createdAt": 1656083200000,
+    "createdAt": 1742832437403,
     "userId": "123456789-1",
-    "fileId": null
+    "file": null
   },
   {
-    "id": 2,
     "text": "Dota",
-    "createdAt": 1656083200000,
+    "createdAt": 1742831477403,
     "userId": "123456789-1",
-    "fileId": null
+    "file": null
   },
   {
-    "id": 3,
     "text": "Laravel",
-    "createdAt": 1656083200000,
+    "createdAt": 1742532477403,
     "userId": "123456789-1",
-    "fileId": null
+    "file": { "id": 1, "name": "file2.txt", "size": 1024, "type": "txt", "url": "https://www.google.com" }
   },
   {
-    "id": 4,
     "text": "React",
-    "createdAt": 1656083200000,
+    "createdAt": 1742832477103,
     "userId": "123456789-2",
-    "fileId": null
+    "file": null
   },
   {
-    "id": 5,
     "text": "Nextjs",
-    "createdAt": 1656083200000,
+    "createdAt": 1742832471403,
     "userId": "123456789-3",
-    "fileId": null
+    "file": null
   }
 ]

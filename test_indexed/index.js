@@ -29,14 +29,10 @@ const DB_VERSION = 1;
 const TABLES = {
   mensajes: {
     v: { [DB_VERSION]: 'mensajes-V1' },
-    keyPath: 'id',
+    keyPath: 'createdAt',
   },
   users: {
     v: { [DB_VERSION]: 'users-V1' },
-    keyPath: 'id',
-  },
-  files: {
-    v: { [DB_VERSION]: 'files-V1' },
     keyPath: 'id',
   },
 };
@@ -64,8 +60,7 @@ idb.onsuccess = (event) => {
   db = event.target.result;
 
   insertUsers();
-  inserMessages();
-  displayData();
+  insertMessages();
 };
 
 idb.onupgradeneeded = (event) => {
@@ -80,63 +75,83 @@ idb.onupgradeneeded = (event) => {
 
   if (event.oldVersion < DB_VERSION) {
     const msjStore = db.createObjectStore(mensajes.v[DB_VERSION], { keyPath: mensajes.keyPath });
-    msjStore.createIndex('createdAt', 'createdAt', { unique: false });
+    // msjStore.createIndex('createdAt', 'createdAt', { unique: false });
     msjStore.createIndex('text', 'text', { unique: false });
     msjStore.createIndex('userId', 'userId', { unique: false });
-    msjStore.createIndex('fileId', 'fileId', { unique: false });
+    msjStore.createIndex('file', 'file.name', { unique: false });
 
     const userStore = db.createObjectStore(users.v[DB_VERSION], { keyPath: users.keyPath });
     userStore.createIndex('name', 'name', { unique: false });
     userStore.createIndex('emp_ruc', 'emp_ruc', { unique: false });
 
-    const fileStore = db.createObjectStore(files.v[DB_VERSION], { keyPath: files.keyPath });
-    fileStore.createIndex('name', 'name', { unique: false });
-    fileStore.createIndex('type', 'type', { unique: false });
-    fileStore.createIndex('size', 'size', { unique: false });
-    fileStore.createIndex('url', 'url', { unique: false });
+    // const fileStore = db.createObjectStore(files.v[DB_VERSION], { keyPath: files.keyPath });
+    // fileStore.createIndex('name', 'name', { unique: false });
+    // fileStore.createIndex('type', 'type', { unique: false });
+    // fileStore.createIndex('size', 'size', { unique: false });
+    // fileStore.createIndex('url', 'url', { unique: false });
   }
 
   notas.appendChild(li('Objeto almacenado creado'));
 };
 
-async function inserMessages() {
+async function insertMessages() {
   const mensajes_sql = await fetch('./mensajes.json');
   const mensajes_json = await mensajes_sql.json();
-  console.log('mensajes_json', mensajes_json);
 
-  const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION], files.v[DB_VERSION]], 'readwrite');
+  if (mensajes_json.length < 0) return;
+
+  const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
   const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
 
-  // mensajes_json.forEach((mensaje) => MSJ_OBS.add(mensaje));
+  // const MSJ_OBS_INDEX = MSJ_OBS.index('createdAt');
+  const MSJ_OBS_REQUEST = MSJ_OBS.openCursor(null, 'prev');
 
-  // MENSAJES_TT.oncomplete = (event) => {
-  //   notas.appendChild(li('Mensajes creados'));
-  //   displayData();
-  // };
-}
-
-async function displayData() {
-  const MENSAJES_TT = db.transaction([users.v[DB_VERSION], mensajes.v[DB_VERSION], files.v[DB_VERSION]], 'readonly');
-  const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
-
-  // IDBCursor ---------------------------------
-  const NAME_OBS_REQUEST = MSJ_OBS.openCursor();
-  NAME_OBS_REQUEST.onsuccess = (event) => {
-    const mensaje = event.target.result;
-    if (mensaje) {
-      const { text } = mensaje.value;
-      lista.appendChild(li(p(text))).appendChild(button('Eliminar'));
-      mensaje.continue();
-    }
+  MSJ_OBS_REQUEST.onerror = (event) => {
+    notas.appendChild(li(`insertMessages error: ${event.target.error.message}`));
   };
 
-  // IDBIndex / IDBObjectStore ---------------------------------
-  try {
-    const message = await getMessageForId(1);
-    console.log('message', message);
-  } catch (error) {
-    console.log('error', error);
-  }
+  MSJ_OBS_REQUEST.onsuccess = (event) => {
+    const count = event.target.result;
+
+    const lastCreatedAt = count ? count.value.createdAt : 0;
+
+    console.log(lastCreatedAt);
+
+    const newMensajes = mensajes_json.filter((mensaje) => mensaje.createdAt > lastCreatedAt);
+    console.log('newMensajes', newMensajes);
+    if (newMensajes.length === 0) {
+      const currentMensajes = MSJ_OBS.openCursor();
+      displayData(currentMensajes);
+
+      return;
+    }
+
+    for (const newMensaje of newMensajes) MSJ_OBS.add(newMensaje);
+
+    MENSAJES_TT.onabort = (event) => {
+      notas.appendChild(li(`insertMessages abort: ${event.target.error.message}`));
+    };
+
+    MENSAJES_TT.oncomplete = (event) => {
+      notas.appendChild(li('Mensajes creados'));
+
+      const MENSAJES_TT2 = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
+      const MSJ_OBS2 = MENSAJES_TT2.objectStore(mensajes.v[DB_VERSION]);
+      // IDBCursor ---------------------------------
+      const NAME_OBS_REQUEST2 = MSJ_OBS2.openCursor();
+      displayData(NAME_OBS_REQUEST2);
+    };
+  };
+}
+
+function displayData(request) {
+  request.onsuccess = (event) => {
+    const mensaje = event.target.result;
+    if (mensaje == null) return;
+    const { text } = mensaje.value;
+    lista.appendChild(li(p(text))).appendChild(button('Eliminar'));
+    mensaje.continue();
+  };
 }
 
 async function getMessageForId(Id) {
@@ -199,16 +214,16 @@ function handleAddTask(e) {
     return;
   }
 
-  const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION], files.v[DB_VERSION]], 'readwrite');
+  const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
 
-  // const newFile = { id: 2, name: 'file2.txt', type: 'txt', size: 1024, url: 'https://www.google.com' };
-  const newFile = null;
+  const newFile = { id: 1, name: 'file2.txt', type: 'txt', size: 1024, url: 'https://www.google.com' };
+  // const newFile = null;
   const newMsj = {
-    id: 1,
+    id: 2,
     text: input.value,
     createdAt: Date.now(),
     userId: `${currentUser.emp_ruc}-${currentUser.id}`,
-    fileId: newFile ? newFile.id : null,
+    file: newFile,
   };
 
   MENSAJES_TT.onerror = (event) => {
@@ -216,27 +231,26 @@ function handleAddTask(e) {
   };
 
   const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
-  const FILES_OBS = MENSAJES_TT.objectStore(files.v[DB_VERSION]);
 
-  if (newFile) {
-    FILES_OBS.add(newFile).onsuccess = (event) => {
-      console.log('Archivo exitoso');
-
-      MSJ_OBS.add(newMsj).onsuccess = (event) => {
-        notas.appendChild(li('Consulta exitosa'));
-        input.value = '';
-      };
-    };
-  } else {
-    MSJ_OBS.add(newMsj).onsuccess = (event) => {
-      notas.appendChild(li('Consulta exitosa'));
-      input.value = '';
-    };
-  }
+  MSJ_OBS.add(newMsj).onsuccess = (event) => {
+    notas.appendChild(li('Consulta exitosa'));
+    input.value = '';
+  };
 
   MENSAJES_TT.oncomplete = (event) => {
     notas.appendChild(li('Todo hecho'));
-    displayData();
+
+    // IDBCursor ---------------------------------
+    const NAME_OBS_REQUEST = MSJ_OBS.openCursor();
+    NAME_OBS_REQUEST.onsuccess = (event) => {
+      const mensaje = event.target.result;
+      console.log('mensaje', mensaje);
+      if (mensaje) {
+        const { text } = mensaje.value;
+        lista.appendChild(li(p(text))).appendChild(button('Eliminar'));
+        mensaje.continue();
+      }
+    };
   };
 }
 
