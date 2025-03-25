@@ -29,23 +29,11 @@ const DB_VERSION = 1;
 const TABLES = {
   mensajes: {
     v: { [DB_VERSION]: 'mensajes-V1' },
-    keyPath: 'createdAt',
-  },
-  users: {
-    v: { [DB_VERSION]: 'users-V1' },
     keyPath: 'id',
   },
 };
-const { mensajes, users, files } = TABLES;
+const { mensajes } = TABLES;
 const currentUser = { id: 3, name: 'Jose', emp_ruc: '123456789' };
-
-const usersData = [
-  { id: 1, name: 'Pepe', emp_ruc: '123456789' },
-  { id: 2, name: 'Maria', emp_ruc: '123456789' },
-  { id: 3, name: 'Jose', emp_ruc: '123456789' },
-  { id: 4, name: 'Juan', emp_ruc: '123456789' },
-  { id: 5, name: 'Luis', emp_ruc: '123456789' },
-];
 
 const idb = window.indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -59,7 +47,6 @@ idb.onsuccess = (event) => {
 
   db = event.target.result;
 
-  insertUsers();
   insertMessages();
 };
 
@@ -74,21 +61,11 @@ idb.onupgradeneeded = (event) => {
   };
 
   if (event.oldVersion < DB_VERSION) {
-    const msjStore = db.createObjectStore(mensajes.v[DB_VERSION], { keyPath: mensajes.keyPath });
-    // msjStore.createIndex('createdAt', 'createdAt', { unique: false });
+    const msjStore = db.createObjectStore(mensajes.v[DB_VERSION], { keyPath: mensajes.keyPath, autoIncrement: true });
+    msjStore.createIndex('createdAt', 'createdAt', { unique: false });
     msjStore.createIndex('text', 'text', { unique: false });
-    msjStore.createIndex('userId', 'userId', { unique: false });
+    msjStore.createIndex('user', 'user._id', { unique: false });
     msjStore.createIndex('file', 'file.name', { unique: false });
-
-    const userStore = db.createObjectStore(users.v[DB_VERSION], { keyPath: users.keyPath });
-    userStore.createIndex('name', 'name', { unique: false });
-    userStore.createIndex('emp_ruc', 'emp_ruc', { unique: false });
-
-    // const fileStore = db.createObjectStore(files.v[DB_VERSION], { keyPath: files.keyPath });
-    // fileStore.createIndex('name', 'name', { unique: false });
-    // fileStore.createIndex('type', 'type', { unique: false });
-    // fileStore.createIndex('size', 'size', { unique: false });
-    // fileStore.createIndex('url', 'url', { unique: false });
   }
 
   notas.appendChild(li('Objeto almacenado creado'));
@@ -110,12 +87,12 @@ async function insertMessages() {
     notas.appendChild(li(`insertMessages error: ${event.target.error.message}`));
   };
 
-  MSJ_OBS_REQUEST.onsuccess = (event) => {
+  MSJ_OBS_REQUEST.onsuccess = async (event) => {
     const count = event.target.result;
 
     const lastCreatedAt = count ? count.value.createdAt : 0;
 
-    console.log(lastCreatedAt);
+    console.log('lastCreatedAt', lastCreatedAt);
 
     const newMensajes = mensajes_json.filter((mensaje) => mensaje.createdAt > lastCreatedAt);
     console.log('newMensajes', newMensajes);
@@ -126,7 +103,7 @@ async function insertMessages() {
       return;
     }
 
-    for (const newMensaje of newMensajes) MSJ_OBS.add(newMensaje);
+    await Promise.all(newMensajes.map((newMensaje) => MSJ_OBS.add(newMensaje)));
 
     MENSAJES_TT.onabort = (event) => {
       notas.appendChild(li(`insertMessages abort: ${event.target.error.message}`));
@@ -154,57 +131,43 @@ function displayData(request) {
   };
 }
 
-async function getMessageForId(Id) {
-  return new Promise((resolve, reject) => {
-    const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION], users.v[DB_VERSION], files.v[DB_VERSION]], 'readonly');
-    const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
-    const USERS_OBS = MENSAJES_TT.objectStore(users.v[DB_VERSION]);
-    const FILES_OBS = MENSAJES_TT.objectStore(files.v[DB_VERSION]);
-    const MSJ_OBS_REQUEST = MSJ_OBS.get(Id);
+// async function getMessageForId(Id) {
+//   return new Promise((resolve, reject) => {
+//     const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION], users.v[DB_VERSION], files.v[DB_VERSION]], 'readonly');
+//     const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
+//     const USERS_OBS = MENSAJES_TT.objectStore(users.v[DB_VERSION]);
+//     const FILES_OBS = MENSAJES_TT.objectStore(files.v[DB_VERSION]);
+//     const MSJ_OBS_REQUEST = MSJ_OBS.get(Id);
 
-    MSJ_OBS_REQUEST.onsuccess = (event) => {
-      const mensaje = event.target.result;
-      if (mensaje == null) return reject('No hay mensaje');
-      const userIdParse = Number(mensaje.userId.split('-')[1]);
-      const USER_OBJ_REQUEST = USERS_OBS.get(userIdParse);
+//     MSJ_OBS_REQUEST.onsuccess = (event) => {
+//       const mensaje = event.target.result;
+//       if (mensaje == null) return reject('No hay mensaje');
+//       const userIdParse = Number(mensaje.userId.split('-')[1]);
+//       const USER_OBJ_REQUEST = USERS_OBS.get(userIdParse);
 
-      USER_OBJ_REQUEST.onsuccess = (event) => {
-        const user = event.target.result;
-        if (user == null) return reject('No hay usuario');
-        const { userId, ...msjwu } = mensaje;
-        if (mensaje.fileId) {
-          const FILE_OBJ_REQUEST = FILES_OBS.get(mensaje.fileId);
-          FILE_OBJ_REQUEST.onsuccess = (event) => {
-            const file = event.target.result;
-            if (file == null) return;
-            const { fileId, ...msjwf } = msjwu;
-            resolve({
-              ...msjwf,
-              user,
-              file,
-            });
-          };
-        } else {
-          resolve(msjwu);
-        }
-      };
-    };
-  });
-}
-
-function insertUsers() {
-  const USERS_TT = db.transaction([users.v[DB_VERSION]], 'readwrite');
-
-  const USERS_OBS = USERS_TT.objectStore(users.v[DB_VERSION]);
-
-  console.log('USERS_OBS.autoIncrement', USERS_OBS.autoIncrement);
-
-  usersData.forEach((user) => USERS_OBS.add(user));
-
-  USERS_TT.oncomplete = (event) => {
-    notas.appendChild(li('Usuarios creados'));
-  };
-}
+//       USER_OBJ_REQUEST.onsuccess = (event) => {
+//         const user = event.target.result;
+//         if (user == null) return reject('No hay usuario');
+//         const { userId, ...msjwu } = mensaje;
+//         if (mensaje.fileId) {
+//           const FILE_OBJ_REQUEST = FILES_OBS.get(mensaje.fileId);
+//           FILE_OBJ_REQUEST.onsuccess = (event) => {
+//             const file = event.target.result;
+//             if (file == null) return;
+//             const { fileId, ...msjwf } = msjwu;
+//             resolve({
+//               ...msjwf,
+//               user,
+//               file,
+//             });
+//           };
+//         } else {
+//           resolve(msjwu);
+//         }
+//       };
+//     };
+//   });
+// }
 
 function handleAddTask(e) {
   e.preventDefault();
@@ -222,7 +185,7 @@ function handleAddTask(e) {
     id: 2,
     text: input.value,
     createdAt: Date.now(),
-    userId: `${currentUser.emp_ruc}-${currentUser.id}`,
+    user: { _id: `${currentUser.emp_ruc}-${currentUser.id}`, name: 'Jose' },
     file: newFile,
   };
 

@@ -2,31 +2,43 @@
   {
     "text": "Hola",
     "createdAt": 1742832437403,
-    "userId": "123456789-1",
+    "user": { "_id": "123456789-1", "name": "Jose" },
     "file": null
   },
   {
     "text": "Dota",
     "createdAt": 1742831477403,
-    "userId": "123456789-1",
+    "user": { "_id": "123456789-1", "name": "Jose" },
     "file": null
   },
   {
     "text": "Laravel",
     "createdAt": 1742532477403,
-    "userId": "123456789-1",
+    "user": { "_id": "123456789-1", "name": "Jose" },
     "file": { "id": 1, "name": "file2.txt", "size": 1024, "type": "txt", "url": "https://www.google.com" }
   },
   {
     "text": "React",
     "createdAt": 1742832477103,
-    "userId": "123456789-2",
+    "user": { "_id": "987654321-2", "name": "Ramon" },
     "file": null
   },
   {
     "text": "Nextjs",
     "createdAt": 1742832471403,
-    "userId": "123456789-3",
+    "user": { "_id": "666666666-3", "name": "Daniel Peredo" },
+    "file": null
+  },
+  {
+    "text": "Nextjs v 14",
+    "createdAt": 1742832471503,
+    "user": { "_id": "666666666-3", "name": "Daniel Peredo" },
+    "file": null
+  },
+  {
+    "text": "Nextjs v 15",
+    "createdAt": 1742832471903,
+    "user": { "_id": "666666666-3", "name": "Daniel Peredo" },
     "file": null
   }
 ]
