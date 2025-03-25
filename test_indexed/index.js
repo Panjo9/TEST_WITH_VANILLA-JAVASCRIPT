@@ -71,53 +71,78 @@ idb.onupgradeneeded = (event) => {
   notas.appendChild(li('Objeto almacenado creado'));
 };
 
+async function obtenerMensajesConCreatedAt(createdAt) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
+    const store = tx.objectStore(mensajes.v[DB_VERSION]);
+    const index = store.index('createdAt');
+    const request = index.getAll(createdAt);
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function filtrarMensajesNuevos(mensajes_json, lastCreatedAt) {
+  const nuevosMensajes = mensajes_json.filter((m) => m.createdAt > lastCreatedAt);
+  const mensajesExistentes = await obtenerMensajesConCreatedAt(lastCreatedAt);
+
+  if (mensajesExistentes.length === 0) return nuevosMensajes;
+
+  const valueSet = (m) => `${m.user._id}-${m.text}`;
+  const mensajesSet = new Set(mensajesExistentes.map((m) => valueSet(m)));
+  const mensajesMismoCreatedAt = mensajes_json.filter(
+    (m) => m.createdAt === lastCreatedAt && !mensajesSet.has(valueSet(m)),
+  );
+
+  return [...nuevosMensajes, ...mensajesMismoCreatedAt];
+}
+
 async function insertMessages() {
   const mensajes_sql = await fetch('./mensajes.json');
   const mensajes_json = await mensajes_sql.json();
+  // const mensajes_json = [];
 
-  if (mensajes_json.length < 0) return;
-
-  const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
+  let MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
   const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
 
-  // const MSJ_OBS_INDEX = MSJ_OBS.index('createdAt');
-  const MSJ_OBS_REQUEST = MSJ_OBS.openCursor(null, 'prev');
+  const MSJ_OBS_INDEX = MSJ_OBS.index('createdAt');
+  const MSJ_OBS_REQUEST = MSJ_OBS_INDEX.openCursor(null, 'prev');
 
   MSJ_OBS_REQUEST.onerror = (event) => {
     notas.appendChild(li(`insertMessages error: ${event.target.error.message}`));
   };
 
   MSJ_OBS_REQUEST.onsuccess = async (event) => {
-    const count = event.target.result;
+    const cursor = event.target.result;
+    const lastCreatedAt = cursor ? cursor.value.createdAt : 0;
 
-    const lastCreatedAt = count ? count.value.createdAt : 0;
+    const newMensajes = await filtrarMensajesNuevos(mensajes_json, lastCreatedAt);
 
-    console.log('lastCreatedAt', lastCreatedAt);
-
-    const newMensajes = mensajes_json.filter((mensaje) => mensaje.createdAt > lastCreatedAt);
-    console.log('newMensajes', newMensajes);
     if (newMensajes.length === 0) {
-      const currentMensajes = MSJ_OBS.openCursor();
-      displayData(currentMensajes);
-
-      return;
-    }
-
-    await Promise.all(newMensajes.map((newMensaje) => MSJ_OBS.add(newMensaje)));
-
-    MENSAJES_TT.onabort = (event) => {
-      notas.appendChild(li(`insertMessages abort: ${event.target.error.message}`));
-    };
-
-    MENSAJES_TT.oncomplete = (event) => {
-      notas.appendChild(li('Mensajes creados'));
-
-      const MENSAJES_TT2 = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
+      const MENSAJES_TT2 = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
       const MSJ_OBS2 = MENSAJES_TT2.objectStore(mensajes.v[DB_VERSION]);
-      // IDBCursor ---------------------------------
-      const NAME_OBS_REQUEST2 = MSJ_OBS2.openCursor();
-      displayData(NAME_OBS_REQUEST2);
-    };
+      const currentMensajes = MSJ_OBS2.openCursor();
+      displayData(currentMensajes);
+    } else {
+      const MENSAJES_TT3 = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
+      const MSJ_OBS3 = MENSAJES_TT3.objectStore(mensajes.v[DB_VERSION]);
+      await Promise.all(newMensajes.map((newMensaje) => MSJ_OBS3.add(newMensaje)));
+
+      MENSAJES_TT3.onabort = (event) => {
+        notas.appendChild(li(`insertMessages abort: ${event.target.error.message}`));
+      };
+
+      MENSAJES_TT3.oncomplete = (event) => {
+        notas.appendChild(li('Mensajes creados'));
+
+        const MENSAJES_TT4 = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
+        const MSJ_OBS4 = MENSAJES_TT4.objectStore(mensajes.v[DB_VERSION]);
+        // IDBCursor ---------------------------------
+        const NAME_OBS_REQUEST2 = MSJ_OBS4.openCursor();
+        displayData(NAME_OBS_REQUEST2);
+      };
+    }
   };
 }
 
@@ -125,54 +150,18 @@ function displayData(request) {
   request.onsuccess = (event) => {
     const mensaje = event.target.result;
     if (mensaje == null) return;
-    const { text } = mensaje.value;
-    lista.appendChild(li(p(text))).appendChild(button('Eliminar'));
+    const { text, key } = mensaje.value;
+    const list = lista.appendChild(li(p(text)));
+    list.appendChild(button('Eliminar', handleDeleteTask, key));
+    list.appendChild(button('Actualizar', handleUpdateTask, key));
     mensaje.continue();
   };
 }
 
-// async function getMessageForId(Id) {
-//   return new Promise((resolve, reject) => {
-//     const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION], users.v[DB_VERSION], files.v[DB_VERSION]], 'readonly');
-//     const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
-//     const USERS_OBS = MENSAJES_TT.objectStore(users.v[DB_VERSION]);
-//     const FILES_OBS = MENSAJES_TT.objectStore(files.v[DB_VERSION]);
-//     const MSJ_OBS_REQUEST = MSJ_OBS.get(Id);
-
-//     MSJ_OBS_REQUEST.onsuccess = (event) => {
-//       const mensaje = event.target.result;
-//       if (mensaje == null) return reject('No hay mensaje');
-//       const userIdParse = Number(mensaje.userId.split('-')[1]);
-//       const USER_OBJ_REQUEST = USERS_OBS.get(userIdParse);
-
-//       USER_OBJ_REQUEST.onsuccess = (event) => {
-//         const user = event.target.result;
-//         if (user == null) return reject('No hay usuario');
-//         const { userId, ...msjwu } = mensaje;
-//         if (mensaje.fileId) {
-//           const FILE_OBJ_REQUEST = FILES_OBS.get(mensaje.fileId);
-//           FILE_OBJ_REQUEST.onsuccess = (event) => {
-//             const file = event.target.result;
-//             if (file == null) return;
-//             const { fileId, ...msjwf } = msjwu;
-//             resolve({
-//               ...msjwf,
-//               user,
-//               file,
-//             });
-//           };
-//         } else {
-//           resolve(msjwu);
-//         }
-//       };
-//     };
-//   });
-// }
-
 function handleAddTask(e) {
   e.preventDefault();
-
-  if (input.value === '') {
+  let inputValue = input.value.trim();
+  if (inputValue === '') {
     notas.appendChild(li('Ingrese el nombre de la tarea'));
     return;
   }
@@ -182,8 +171,7 @@ function handleAddTask(e) {
   const newFile = { id: 1, name: 'file2.txt', type: 'txt', size: 1024, url: 'https://www.google.com' };
   // const newFile = null;
   const newMsj = {
-    id: 2,
-    text: input.value,
+    text: inputValue,
     createdAt: Date.now(),
     user: { _id: `${currentUser.emp_ruc}-${currentUser.id}`, name: 'Jose' },
     file: newFile,
@@ -197,23 +185,24 @@ function handleAddTask(e) {
 
   MSJ_OBS.add(newMsj).onsuccess = (event) => {
     notas.appendChild(li('Consulta exitosa'));
-    input.value = '';
+    inputValue = '';
   };
 
   MENSAJES_TT.oncomplete = (event) => {
-    notas.appendChild(li('Todo hecho'));
+    notas.appendChild(li('Todo hecho, se ha añadido'));
 
     // IDBCursor ---------------------------------
-    const NAME_OBS_REQUEST = MSJ_OBS.openCursor();
-    NAME_OBS_REQUEST.onsuccess = (event) => {
-      const mensaje = event.target.result;
-      console.log('mensaje', mensaje);
-      if (mensaje) {
-        const { text } = mensaje.value;
-        lista.appendChild(li(p(text))).appendChild(button('Eliminar'));
-        mensaje.continue();
-      }
-    };
+    // const NAME_OBS_REQUEST = MSJ_OBS.openCursor();
+    // NAME_OBS_REQUEST.onsuccess = (event) => {
+    //   const mensaje = event.target.result;
+    //   if (mensaje) {
+    //     const { text, key } = mensaje.value;
+    //     const list = lista.appendChild(li(p(text)));
+    //     list.appendChild(button('Eliminar', handleDeleteTask, key));
+    //     list.appendChild(button('Actualizar', handleUpdateTask, key));
+    //     mensaje.continue();
+    //   }
+    // };
   };
 }
 
@@ -221,6 +210,59 @@ function handleDeleteTask(e) {
   e.preventDefault();
 
   console.log('Eliminar tarea');
+}
+
+function handleUpdateTask(e) {
+  e.preventDefault();
+
+  const { key } = e.target.dataset;
+  let inputValue = input.value.trim();
+  if (inputValue === '') {
+    notas.appendChild(li('Ingrese el nombre de la tarea'));
+    return;
+  }
+
+  const MENSAJES_TT = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
+
+  const newFile = { id: inputValue.length, name: 'file2.txt', type: 'txt', size: 1024, url: 'https://www.google.com' };
+  // const newFile = null;
+  const newMsj = {
+    text: inputValue,
+    createdAt: Date.now(),
+    user: { _id: `${currentUser.emp_ruc}-${currentUser.id}`, name: 'Jose' },
+    file: newFile,
+  };
+
+  MENSAJES_TT.onerror = (event) => {
+    notas.appendChild(li(`Error al añadir la tarea: ${event.target.error}`));
+  };
+
+  const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
+
+  MSJ_OBS.put(newMsj).onsuccess = (event) => {
+    notas.appendChild(li('Consulta exitosa, Actualizado'));
+    inputValue = '';
+  };
+
+  MENSAJES_TT.oncomplete = () => {
+    notas.appendChild(li('Todo hecho se ha actualizado'));
+
+    // IDBCursor ---------------------------------
+    // const MENSAJES_TT2 = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
+    // const MSJ_OBS2 = MENSAJES_TT2.objectStore(mensajes.v[DB_VERSION]);
+    // const MSJ_OBS_REQUEST = MSJ_OBS2.openCursor();
+    // MSJ_OBS_REQUEST.onsuccess = (event) => {
+    //   const mensaje = event.target.result;
+    //   console.log('mensaje', mensaje);
+    //   if (mensaje) {
+    //     const { text } = mensaje.value;
+    //     const list = lista.appendChild(li(p(text)));
+    //     list.appendChild(button('Eliminar', handleDeleteTask, key));
+    //     list.appendChild(button('Actualizar', handleUpdateTask, key));
+    //     mensaje.continue();
+    //   }
+    // };
+  };
 }
 
 function li(note) {
@@ -236,11 +278,12 @@ function p(parr) {
   return parrafo;
 }
 
-function button(text) {
+function button(text, event, createdAt) {
   const button = el('button');
   button.innerHTML = text;
   button.type = 'button';
-  button.addEventListener('click', handleDeleteTask, false);
+  button.addEventListener('click', event, false);
+  button.dataset.createdAt = createdAt;
   return button;
 }
 

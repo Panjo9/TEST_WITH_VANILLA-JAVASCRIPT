@@ -30,15 +30,9 @@
     "file": null
   },
   {
-    "text": "Nextjs v 14",
-    "createdAt": 1742832471503,
-    "user": { "_id": "666666666-3", "name": "Daniel Peredo" },
-    "file": null
-  },
-  {
-    "text": "Nextjs v 15",
-    "createdAt": 1742832471903,
-    "user": { "_id": "666666666-3", "name": "Daniel Peredo" },
+    "text": "React2",
+    "createdAt": 1742832477103,
+    "user": { "_id": "987654321-2", "name": "Ramon" },
     "file": null
   }
 ]
