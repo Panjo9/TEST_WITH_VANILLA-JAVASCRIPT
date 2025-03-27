@@ -28,11 +28,5 @@
     "createdAt": 1742832471403,
     "user": { "_id": "666666666-3", "name": "Daniel Peredo" },
     "file": null
-  },
-  {
-    "text": "React2",
-    "createdAt": 1742832477103,
-    "user": { "_id": "987654321-2", "name": "Ramon" },
-    "file": null
   }
 ]

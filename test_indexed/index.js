@@ -1,13 +1,3 @@
-class IDB {
-  dbName;
-  dbVersion;
-  constructor(dbName, dbVersion) {
-    this.dbName = dbName;
-    this.dbVersion = dbVersion;
-    window.indexedDB.open(dbName, dbVersion);
-  }
-}
-
 const $ = (el) => document.querySelector(el);
 const $$ = (el) => document.querySelectorAll(el);
 const _ = (el) => document.getElementById(el);
@@ -83,21 +73,6 @@ async function obtenerMensajesConCreatedAt(createdAt) {
   });
 }
 
-async function filtrarMensajesNuevos(mensajes_json, lastCreatedAt) {
-  const nuevosMensajes = mensajes_json.filter((m) => m.createdAt > lastCreatedAt);
-  const mensajesExistentes = await obtenerMensajesConCreatedAt(lastCreatedAt);
-
-  if (mensajesExistentes.length === 0) return nuevosMensajes;
-
-  const valueSet = (m) => `${m.user._id}-${m.text}`;
-  const mensajesSet = new Set(mensajesExistentes.map((m) => valueSet(m)));
-  const mensajesMismoCreatedAt = mensajes_json.filter(
-    (m) => m.createdAt === lastCreatedAt && !mensajesSet.has(valueSet(m)),
-  );
-
-  return [...nuevosMensajes, ...mensajesMismoCreatedAt];
-}
-
 async function insertMessages() {
   const mensajes_sql = await fetch('./mensajes.json');
   const mensajes_json = await mensajes_sql.json();
@@ -117,31 +92,38 @@ async function insertMessages() {
     const cursor = event.target.result;
     const lastCreatedAt = cursor ? cursor.value.createdAt : 0;
 
-    const newMensajes = await filtrarMensajesNuevos(mensajes_json, lastCreatedAt);
+    const newMensajes = mensajes_json.filter((m) => m.createdAt > lastCreatedAt);
 
     if (newMensajes.length === 0) {
       const MENSAJES_TT2 = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
       const MSJ_OBS2 = MENSAJES_TT2.objectStore(mensajes.v[DB_VERSION]);
       const currentMensajes = MSJ_OBS2.openCursor();
+      currentMensajes.onerror = (event) => {
+        notas.appendChild(li(`Error no mensajes nuevos : ${event.target.error.message}`));
+      };
       displayData(currentMensajes);
     } else {
       const MENSAJES_TT3 = db.transaction([mensajes.v[DB_VERSION]], 'readwrite');
-      const MSJ_OBS3 = MENSAJES_TT3.objectStore(mensajes.v[DB_VERSION]);
-      await Promise.all(newMensajes.map((newMensaje) => MSJ_OBS3.add(newMensaje)));
 
       MENSAJES_TT3.onabort = (event) => {
         notas.appendChild(li(`insertMessages abort: ${event.target.error.message}`));
       };
 
-      MENSAJES_TT3.oncomplete = (event) => {
-        notas.appendChild(li('Mensajes creados'));
+      MENSAJES_TT3.oncomplete = async (event) => {
+        notas.appendChild(li('Todo hecho, se anadieron mensajes'));
 
         const MENSAJES_TT4 = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
         const MSJ_OBS4 = MENSAJES_TT4.objectStore(mensajes.v[DB_VERSION]);
         // IDBCursor ---------------------------------
         const NAME_OBS_REQUEST2 = MSJ_OBS4.openCursor();
+        NAME_OBS_REQUEST2.onerror = (event) => {
+          notas.appendChild(li(`Error en mensajes nuevos : ${event.target.error.message}`));
+        };
         displayData(NAME_OBS_REQUEST2);
       };
+
+      const MSJ_OBS3 = MENSAJES_TT3.objectStore(mensajes.v[DB_VERSION]);
+      await Promise.all(newMensajes.map((newMensaje) => MSJ_OBS3.add(newMensaje)));
     }
   };
 }
@@ -150,10 +132,10 @@ function displayData(request) {
   request.onsuccess = (event) => {
     const mensaje = event.target.result;
     if (mensaje == null) return;
-    const { text, key } = mensaje.value;
-    const list = lista.appendChild(li(p(text)));
-    list.appendChild(button('Eliminar', handleDeleteTask, key));
-    list.appendChild(button('Actualizar', handleUpdateTask, key));
+    const { text } = mensaje.value;
+    const list = lista.appendChild(li(p(text), mensaje.key));
+    list.appendChild(button('Eliminar', handleDeleteTask, mensaje.key));
+    list.appendChild(button('Actualizar', handleUpdateTask, mensaje.key));
     mensaje.continue();
   };
 }
@@ -182,27 +164,21 @@ function handleAddTask(e) {
   };
 
   const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
+  const MSJ_OBS_REQUEST = MSJ_OBS.add(newMsj);
+  MSJ_OBS_REQUEST.onsuccess = (event) => {
+    const key = event.target.result;
 
-  MSJ_OBS.add(newMsj).onsuccess = (event) => {
     notas.appendChild(li('Consulta exitosa'));
-    inputValue = '';
+
+    lista.appendChild(li(p(inputValue), key));
+    lista.appendChild(button('Eliminar', handleDeleteTask, key));
+    lista.appendChild(button('Actualizar', handleUpdateTask, key));
+
+    input.value = '';
   };
 
   MENSAJES_TT.oncomplete = (event) => {
     notas.appendChild(li('Todo hecho, se ha añadido'));
-
-    // IDBCursor ---------------------------------
-    // const NAME_OBS_REQUEST = MSJ_OBS.openCursor();
-    // NAME_OBS_REQUEST.onsuccess = (event) => {
-    //   const mensaje = event.target.result;
-    //   if (mensaje) {
-    //     const { text, key } = mensaje.value;
-    //     const list = lista.appendChild(li(p(text)));
-    //     list.appendChild(button('Eliminar', handleDeleteTask, key));
-    //     list.appendChild(button('Actualizar', handleUpdateTask, key));
-    //     mensaje.continue();
-    //   }
-    // };
   };
 }
 
@@ -227,6 +203,7 @@ function handleUpdateTask(e) {
   const newFile = { id: inputValue.length, name: 'file2.txt', type: 'txt', size: 1024, url: 'https://www.google.com' };
   // const newFile = null;
   const newMsj = {
+    id: Number(key),
     text: inputValue,
     createdAt: Date.now(),
     user: { _id: `${currentUser.emp_ruc}-${currentUser.id}`, name: 'Jose' },
@@ -239,36 +216,27 @@ function handleUpdateTask(e) {
 
   const MSJ_OBS = MENSAJES_TT.objectStore(mensajes.v[DB_VERSION]);
 
-  MSJ_OBS.put(newMsj).onsuccess = (event) => {
+  const MSJ_OBS_REQUEST = MSJ_OBS.put(newMsj);
+  MSJ_OBS_REQUEST.onsuccess = (event) => {
     notas.appendChild(li('Consulta exitosa, Actualizado'));
-    inputValue = '';
+
+    const liTarget = lista.querySelector(`li[data-key="${key}"]`);
+    const pTarget = liTarget.querySelector('p');
+    pTarget.innerHTML = inputValue;
+
+    input.value = '';
   };
 
   MENSAJES_TT.oncomplete = () => {
     notas.appendChild(li('Todo hecho se ha actualizado'));
-
-    // IDBCursor ---------------------------------
-    // const MENSAJES_TT2 = db.transaction([mensajes.v[DB_VERSION]], 'readonly');
-    // const MSJ_OBS2 = MENSAJES_TT2.objectStore(mensajes.v[DB_VERSION]);
-    // const MSJ_OBS_REQUEST = MSJ_OBS2.openCursor();
-    // MSJ_OBS_REQUEST.onsuccess = (event) => {
-    //   const mensaje = event.target.result;
-    //   console.log('mensaje', mensaje);
-    //   if (mensaje) {
-    //     const { text } = mensaje.value;
-    //     const list = lista.appendChild(li(p(text)));
-    //     list.appendChild(button('Eliminar', handleDeleteTask, key));
-    //     list.appendChild(button('Actualizar', handleUpdateTask, key));
-    //     mensaje.continue();
-    //   }
-    // };
   };
 }
 
-function li(note) {
+function li(note, key) {
   const li = el('li');
   if (note instanceof HTMLElement) li.appendChild(note);
   else li.innerHTML = note;
+  if (key) li.dataset.key = key;
   return li;
 }
 
@@ -278,12 +246,12 @@ function p(parr) {
   return parrafo;
 }
 
-function button(text, event, createdAt) {
+function button(text, event, key) {
   const button = el('button');
   button.innerHTML = text;
   button.type = 'button';
   button.addEventListener('click', event, false);
-  button.dataset.createdAt = createdAt;
+  button.dataset.key = key;
   return button;
 }
 
